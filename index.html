@@ -35,25 +35,20 @@
     <main class="main">
       <div class="toolbar">
         <div class="nav-buttons">
-          <button type="button" class="btn btn-icon" id="prevMonth" aria-label="Mes anterior">‹</button>
-          <button type="button" class="btn btn-icon" id="nextMonth" aria-label="Mes siguiente">›</button>
-          <h3 class="current-month" id="currentMonth"></h3>
+          <button type="button" class="btn btn-icon" id="prevDay" aria-label="Día anterior">‹</button>
+          <button type="button" class="btn btn-icon" id="nextDay" aria-label="Día siguiente">›</button>
+          <h3 class="current-day-label" id="currentDayLabel"></h3>
         </div>
         <button type="button" class="btn btn-primary" id="newReservation" disabled title="Inicia sesión con Google para reservar">+ Nueva reservación</button>
       </div>
       <div id="connectionStatus" class="connection-status" role="status"></div>
 
-      <div class="calendar-wrapper">
-        <div class="weekdays-header">
-          <span>Domingo</span>
-          <span>Lunes</span>
-          <span>Martes</span>
-          <span>Miércoles</span>
-          <span>Jueves</span>
-          <span>Viernes</span>
-          <span>Sábado</span>
+      <div class="day-view-wrapper">
+        <div class="day-view-header">
+          <span class="day-view-header-hour">Hora</span>
+          <span class="day-view-header-events">Reservaciones</span>
         </div>
-        <div class="calendar-grid" id="calendarGrid"></div>
+        <div class="day-view-body" id="dayViewBody"></div>
       </div>
     </main>
   </div>
@@ -76,12 +71,12 @@
         </div>
         <div class="form-row">
           <div class="form-group">
-            <label for="fecha">Día</label>
+            <label for="fecha">Día (calendario)</label>
             <input type="date" id="fecha" name="fecha" required>
           </div>
           <div class="form-group">
-            <label for="hora">Hora</label>
-            <input type="time" id="hora" name="hora" required>
+            <label for="hora">Hora (8:00 – 18:00)</label>
+            <input type="time" id="hora" name="hora" required min="08:00" max="18:00" step="3600" placeholder="08:00–18:00">
           </div>
         </div>
         <div class="form-group">

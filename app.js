@@ -53,7 +53,7 @@
     var db = initFirebase();
     if (!db) {
       state.reservations = loadReservationsLocal();
-      renderCalendar();
+      renderDayView();
       setConnectionStatus('local', 'Modo local: las reservas solo se ven en este navegador. Revisa config.js (Firebase) y que todos abran la MISMA URL.');
       return;
     }
@@ -66,13 +66,13 @@
           if (a.fecha !== b.fecha) return a.fecha.localeCompare(b.fecha);
           return (a.hora || '').localeCompare(b.hora || '');
         });
-        renderCalendar();
+        renderDayView();
         setConnectionStatus('cloud', 'Reservas compartidas (nube): todos ven lo mismo en cualquier dispositivo.');
       },
       function (err) {
         console.warn('Firestore error', err);
         state.reservations = loadReservationsLocal();
-        renderCalendar();
+        renderDayView();
         setConnectionStatus('error', 'No se pudo conectar a la nube. Revisa reglas de Firestore y que la URL esté autorizada. Mientras tanto: solo local.');
       }
     );
@@ -81,6 +81,12 @@
   function getReservationsForDay(year, month, day) {
     const key = year + '-' + String(month + 1).padStart(2, '0') + '-' + String(day).padStart(2, '0');
     return state.reservations.filter(function (r) { return r.fecha === key; });
+  }
+
+  function parseHour(horaStr) {
+    if (!horaStr) return 0;
+    var parts = String(horaStr).trim().split(':');
+    return parseInt(parts[0], 10) || 0;
   }
 
   // --- Google Auth ---
@@ -171,54 +177,40 @@
     }
   }
 
-  // --- Calendario ---
-  function renderCalendar() {
-    var grid = document.getElementById('calendarGrid');
-    var monthLabel = document.getElementById('currentMonth');
-    var y = state.currentDate.getFullYear();
-    var m = state.currentDate.getMonth();
+  // --- Vista por día (8:00 – 18:00) ---
+  const HOUR_START = 8;
+  const HOUR_END = 18;
 
-    monthLabel.textContent = months[m] + ' ' + y;
+  function renderDayView() {
+    var body = document.getElementById('dayViewBody');
+    var dayLabel = document.getElementById('currentDayLabel');
+    var d = state.currentDate;
+    var y = d.getFullYear();
+    var m = d.getMonth();
+    var day = d.getDate();
+    var dayKey = y + '-' + String(m + 1).padStart(2, '0') + '-' + String(day).padStart(2, '0');
 
-    var first = new Date(y, m, 1);
-    var last = new Date(y, m + 1, 0);
-    var startOffset = first.getDay();
-    var daysInMonth = last.getDate();
-    var today = new Date();
-    var todayKey = today.getFullYear() + '-' + String(today.getMonth() + 1).padStart(2, '0') + '-' + String(today.getDate()).padStart(2, '0');
+    dayLabel.textContent = formatDate(dayKey);
 
+    var dayReservations = getReservationsForDay(y, m, day);
     var html = '';
-    var totalCells = Math.ceil((startOffset + daysInMonth) / 7) * 7;
 
-    for (var i = 0; i < totalCells; i++) {
-      var dayNum = i - startOffset + 1;
-      var isOtherMonth = dayNum < 1 || dayNum > daysInMonth;
-      var day = dayNum >= 1 && dayNum <= daysInMonth ? dayNum : (dayNum < 1 ? new Date(y, m, 0).getDate() + dayNum : dayNum - daysInMonth);
-      var actualMonth = dayNum < 1 ? m - 1 : dayNum > daysInMonth ? m + 1 : m;
-      var actualYear = actualMonth < 0 ? y - 1 : actualMonth > 11 ? y + 1 : y;
-      var cellDate = dayNum >= 1 && dayNum <= daysInMonth ? new Date(y, m, dayNum) : new Date(actualYear, actualMonth, day);
-      var dayKey = cellDate.getFullYear() + '-' + String(cellDate.getMonth() + 1).padStart(2, '0') + '-' + String(cellDate.getDate()).padStart(2, '0');
-      var isToday = dayKey === todayKey;
-      var events = getReservationsForDay(cellDate.getFullYear(), cellDate.getMonth(), cellDate.getDate());
-
-      var otherClass = isOtherMonth ? ' other-month' : '';
-      var todayClass = isToday ? ' today' : '';
+    for (var h = HOUR_START; h <= HOUR_END; h++) {
+      var hourLabel = (h < 10 ? '0' : '') + h + ':00';
+      var events = dayReservations.filter(function (r) { return parseHour(r.hora) === h; });
       var eventsHtml = events.map(function (ev) {
-        var label = ev.hora + ' — Reservado';
+        var label = (ev.hora || '') + ' — ' + (ev.asunto || 'Reservado');
         return '<button type="button" class="event-pill" data-id="' + escapeAttr(ev.id) + '" title="' + escapeAttr(label) + '">' + escapeAttr(label) + '</button>';
       }).join('');
-
-      html += '<div class="day-cell' + otherClass + todayClass + '" data-date="' + escapeAttr(dayKey) + '">' +
-        '<div class="day-number">' + (dayNum >= 1 && dayNum <= daysInMonth ? dayNum : day) + '</div>' +
-        '<div class="day-events">' + eventsHtml + '</div></div>';
+      if (!eventsHtml) eventsHtml = '<span class="day-slot-empty">—</span>';
+      html += '<div class="day-view-row">' +
+        '<div class="day-view-hour">' + hourLabel + '</div>' +
+        '<div class="day-view-events">' + eventsHtml + '</div></div>';
     }
 
-    grid.innerHTML = html;
+    body.innerHTML = html;
 
-    grid.querySelectorAll('.day-cell').forEach(function (cell) {
-      cell.addEventListener('click', onDayClick);
-    });
-    grid.querySelectorAll('.event-pill').forEach(function (btn) {
+    body.querySelectorAll('.event-pill').forEach(function (btn) {
       btn.addEventListener('click', function (e) {
         e.stopPropagation();
         openDetail(btn.dataset.id);
@@ -232,28 +224,22 @@
     return div.innerHTML;
   }
 
-  function onDayClick(e) {
-    if (e.target.classList.contains('event-pill')) return;
-    if (!state.user) {
-      alert('Inicia sesión con Google para poder reservar.');
-      return;
-    }
-    var date = e.currentTarget.dataset.date;
-    openModal(date);
-  }
-
   function openModal(prefillDate) {
     if (!state.user) return;
     var overlay = document.getElementById('modalOverlay');
     var form = document.getElementById('reservationForm');
+    var fechaInput = document.getElementById('fecha');
+    var horaInput = document.getElementById('hora');
     form.reset();
     document.getElementById('responsable').value = state.user.name || state.user.email;
     if (prefillDate) {
-      document.getElementById('fecha').value = prefillDate;
+      fechaInput.value = prefillDate;
     } else {
-      var d = new Date();
-      document.getElementById('fecha').value = d.toISOString().slice(0, 10);
+      var d = state.currentDate;
+      fechaInput.value = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
     }
+    horaInput.setAttribute('min', '08:00');
+    horaInput.setAttribute('max', '18:00');
     overlay.classList.add('open');
     document.getElementById('asunto').focus();
   }
@@ -302,6 +288,12 @@
     var hora = document.getElementById('hora').value;
     var participantes = document.getElementById('participantes').value.trim();
 
+    var h = parseHour(hora);
+    if (h < HOUR_START || h > HOUR_END) {
+      alert('La hora debe estar entre 8:00 y 18:00.');
+      return;
+    }
+
     var data = {
       responsable: responsable,
       asunto: asunto,
@@ -335,7 +327,7 @@
     state.reservations.push(data);
     saveReservationsLocal();
     closeModal();
-    renderCalendar();
+    renderDayView();
   }
 
   function deleteReservation() {
@@ -359,21 +351,21 @@
     state.reservations = state.reservations.filter(function (r) { return r.id !== id; });
     saveReservationsLocal();
     closeDetail();
-    renderCalendar();
+    renderDayView();
   }
 
-  function prevMonth() {
-    state.currentDate.setMonth(state.currentDate.getMonth() - 1);
-    renderCalendar();
+  function prevDay() {
+    state.currentDate.setDate(state.currentDate.getDate() - 1);
+    renderDayView();
   }
 
-  function nextMonth() {
-    state.currentDate.setMonth(state.currentDate.getMonth() + 1);
-    renderCalendar();
+  function nextDay() {
+    state.currentDate.setDate(state.currentDate.getDate() + 1);
+    renderDayView();
   }
 
-  document.getElementById('prevMonth').addEventListener('click', prevMonth);
-  document.getElementById('nextMonth').addEventListener('click', nextMonth);
+  document.getElementById('prevDay').addEventListener('click', prevDay);
+  document.getElementById('nextDay').addEventListener('click', nextDay);
   document.getElementById('newReservation').addEventListener('click', function () { openModal(); });
   document.getElementById('reservationForm').addEventListener('submit', onFormSubmit);
   document.getElementById('closeModal').addEventListener('click', closeModal);
@@ -392,7 +384,7 @@
     subscribeReservations();
   } else {
     state.reservations = loadReservationsLocal();
-    renderCalendar();
+    renderDayView();
     setConnectionStatus('local', 'Modo local: configura Firebase en config.js (projectId, apiKey, etc.) y que todos abran la MISMA URL (ej. GitHub Pages).');
   }
   updateReservationButton();

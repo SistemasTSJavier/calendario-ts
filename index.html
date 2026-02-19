@@ -9,6 +9,9 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&display=swap" rel="stylesheet">
   <script src="https://accounts.google.com/gsi/client" async defer></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-firestore-compat.js"></script>
 </head>
 <body>
   <div class="app">
@@ -38,6 +41,7 @@
         </div>
         <button type="button" class="btn btn-primary" id="newReservation" disabled title="Inicia sesión con Google para reservar">+ Nueva reservación</button>
       </div>
+      <div id="connectionStatus" class="connection-status" role="status"></div>
 
       <div class="calendar-wrapper">
         <div class="weekdays-header">

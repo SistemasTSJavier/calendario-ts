@@ -5,13 +5,25 @@
     'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'
   ];
 
+  const firebaseConfig = window.TACTICAL_SUPPORT_FIREBASE_CONFIG || {};
+  const useFirebase = !!(firebaseConfig && firebaseConfig.projectId);
+
   let state = {
     currentDate: new Date(),
-    reservations: loadReservations(),
+    reservations: [],
     user: null
   };
 
-  function loadReservations() {
+  let firestoreUnsubscribe = null;
+
+  function setConnectionStatus(mode, message) {
+    var el = document.getElementById('connectionStatus');
+    if (!el) return;
+    el.className = 'connection-status ' + mode;
+    el.textContent = message;
+  }
+
+  function loadReservationsLocal() {
     try {
       const data = localStorage.getItem(STORAGE_KEY);
       return data ? JSON.parse(data) : [];
@@ -20,16 +32,58 @@
     }
   }
 
-  function saveReservations() {
+  function saveReservationsLocal() {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state.reservations));
   }
 
-  function getReservationsForDay(year, month, day) {
-    const key = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-    return state.reservations.filter(r => r.fecha === key);
+  function initFirebase() {
+    if (!useFirebase || typeof firebase === 'undefined') return null;
+    try {
+      if (!firebase.apps.length) {
+        firebase.initializeApp(firebaseConfig);
+      }
+      return firebase.firestore();
+    } catch (e) {
+      console.warn('Firebase init error', e);
+      return null;
+    }
   }
 
-  // --- Google Auth (sin backend) ---
+  function subscribeReservations() {
+    var db = initFirebase();
+    if (!db) {
+      state.reservations = loadReservationsLocal();
+      renderCalendar();
+      setConnectionStatus('local', 'Modo local: las reservas solo se ven en este navegador. Revisa config.js (Firebase) y que todos abran la MISMA URL.');
+      return;
+    }
+    var coll = db.collection('reservations');
+    firestoreUnsubscribe = coll.orderBy('fecha').onSnapshot(
+      function (snapshot) {
+        state.reservations = snapshot.docs.map(function (d) {
+          return { id: d.id, ...d.data() };
+        }).sort(function (a, b) {
+          if (a.fecha !== b.fecha) return a.fecha.localeCompare(b.fecha);
+          return (a.hora || '').localeCompare(b.hora || '');
+        });
+        renderCalendar();
+        setConnectionStatus('cloud', 'Reservas compartidas (nube): todos ven lo mismo en cualquier dispositivo.');
+      },
+      function (err) {
+        console.warn('Firestore error', err);
+        state.reservations = loadReservationsLocal();
+        renderCalendar();
+        setConnectionStatus('error', 'No se pudo conectar a la nube. Revisa reglas de Firestore y que la URL esté autorizada. Mientras tanto: solo local.');
+      }
+    );
+  }
+
+  function getReservationsForDay(year, month, day) {
+    const key = year + '-' + String(month + 1).padStart(2, '0') + '-' + String(day).padStart(2, '0');
+    return state.reservations.filter(function (r) { return r.fecha === key; });
+  }
+
+  // --- Google Auth ---
   function initGoogleAuth() {
     const clientId = window.TACTICAL_SUPPORT_GOOGLE_CLIENT_ID;
     if (!clientId || !window.google) return;
@@ -53,14 +107,23 @@
   }
 
   function onGoogleSignIn(response) {
-    if (!response?.credential) return;
+    if (!response || !response.credential) return;
     try {
-      const payload = JSON.parse(atob(response.credential.split('.')[1]));
+      var payload = JSON.parse(atob(response.credential.split('.')[1]));
       state.user = {
         email: payload.email || '',
         name: payload.name || payload.email
       };
-    } catch {
+      if (useFirebase && typeof firebase !== 'undefined' && firebase.auth) {
+        var credential = firebase.auth.GoogleAuthProvider.credential(response.credential);
+        firebase.auth().signInWithCredential(credential).then(function () {
+          updateReservationButton();
+        }).catch(function (err) {
+          console.warn('Firebase Auth sign-in:', err);
+          updateReservationButton();
+        });
+      }
+    } catch (e) {
       state.user = { email: '', name: '' };
     }
     renderAuthUI();
@@ -69,18 +132,21 @@
 
   function signOut() {
     state.user = null;
-    if (window.google?.accounts?.id) {
+    if (window.google && window.google.accounts && window.google.accounts.id) {
       window.google.accounts.id.disableAutoSelect();
+    }
+    if (useFirebase && typeof firebase !== 'undefined' && firebase.auth) {
+      firebase.auth().signOut().catch(function () {});
     }
     renderAuthUI();
     updateReservationButton();
   }
 
   function renderAuthUI() {
-    const btnContainer = document.getElementById('googleSignInBtn');
-    const userInfo = document.getElementById('userInfo');
-    const userEmail = document.getElementById('userEmail');
-    const signOutBtn = document.getElementById('signOutBtn');
+    var btnContainer = document.getElementById('googleSignInBtn');
+    var userInfo = document.getElementById('userInfo');
+    var userEmail = document.getElementById('userEmail');
+    var signOutBtn = document.getElementById('signOutBtn');
 
     if (!btnContainer || !userInfo) return;
 
@@ -98,69 +164,72 @@
   }
 
   function updateReservationButton() {
-    const btn = document.getElementById('newReservation');
+    var btn = document.getElementById('newReservation');
     if (btn) {
       btn.disabled = !state.user;
       btn.title = state.user ? 'Crear nueva reservación' : 'Inicia sesión con Google para reservar';
     }
   }
 
-  // --- Calendario: solo se visualiza la fecha de reserva ---
+  // --- Calendario ---
   function renderCalendar() {
-    const grid = document.getElementById('calendarGrid');
-    const monthLabel = document.getElementById('currentMonth');
-    const y = state.currentDate.getFullYear();
-    const m = state.currentDate.getMonth();
+    var grid = document.getElementById('calendarGrid');
+    var monthLabel = document.getElementById('currentMonth');
+    var y = state.currentDate.getFullYear();
+    var m = state.currentDate.getMonth();
 
-    monthLabel.textContent = `${months[m]} ${y}`;
+    monthLabel.textContent = months[m] + ' ' + y;
 
-    const first = new Date(y, m, 1);
-    const last = new Date(y, m + 1, 0);
-    const startOffset = first.getDay();
-    const daysInMonth = last.getDate();
-    const today = new Date();
-    const todayKey = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+    var first = new Date(y, m, 1);
+    var last = new Date(y, m + 1, 0);
+    var startOffset = first.getDay();
+    var daysInMonth = last.getDate();
+    var today = new Date();
+    var todayKey = today.getFullYear() + '-' + String(today.getMonth() + 1).padStart(2, '0') + '-' + String(today.getDate()).padStart(2, '0');
 
-    let html = '';
-    const totalCells = Math.ceil((startOffset + daysInMonth) / 7) * 7;
+    var html = '';
+    var totalCells = Math.ceil((startOffset + daysInMonth) / 7) * 7;
 
-    for (let i = 0; i < totalCells; i++) {
-      const dayNum = i - startOffset + 1;
-      const isOtherMonth = dayNum < 1 || dayNum > daysInMonth;
-      const day = dayNum > 0 && dayNum <= daysInMonth ? dayNum : (dayNum < 1 ? new Date(y, m, 0).getDate() + dayNum : dayNum - daysInMonth);
-      const actualMonth = dayNum < 1 ? m - 1 : dayNum > daysInMonth ? m + 1 : m;
-      const actualYear = actualMonth < 0 ? y - 1 : actualMonth > 11 ? y + 1 : y;
-      const cellDate = dayNum >= 1 && dayNum <= daysInMonth ? new Date(y, m, dayNum) : new Date(actualYear, actualMonth, day);
-      const dayKey = `${cellDate.getFullYear()}-${String(cellDate.getMonth() + 1).padStart(2, '0')}-${String(cellDate.getDate()).padStart(2, '0')}`;
-      const isToday = dayKey === todayKey;
-      const events = getReservationsForDay(cellDate.getFullYear(), cellDate.getMonth(), cellDate.getDate());
+    for (var i = 0; i < totalCells; i++) {
+      var dayNum = i - startOffset + 1;
+      var isOtherMonth = dayNum < 1 || dayNum > daysInMonth;
+      var day = dayNum >= 1 && dayNum <= daysInMonth ? dayNum : (dayNum < 1 ? new Date(y, m, 0).getDate() + dayNum : dayNum - daysInMonth);
+      var actualMonth = dayNum < 1 ? m - 1 : dayNum > daysInMonth ? m + 1 : m;
+      var actualYear = actualMonth < 0 ? y - 1 : actualMonth > 11 ? y + 1 : y;
+      var cellDate = dayNum >= 1 && dayNum <= daysInMonth ? new Date(y, m, dayNum) : new Date(actualYear, actualMonth, day);
+      var dayKey = cellDate.getFullYear() + '-' + String(cellDate.getMonth() + 1).padStart(2, '0') + '-' + String(cellDate.getDate()).padStart(2, '0');
+      var isToday = dayKey === todayKey;
+      var events = getReservationsForDay(cellDate.getFullYear(), cellDate.getMonth(), cellDate.getDate());
 
-      const otherClass = isOtherMonth ? ' other-month' : '';
-      const todayClass = isToday ? ' today' : '';
-      const eventsHtml = events
-        .map(ev => {
-          const label = `${ev.hora} — Reservado`;
-          return `<button type="button" class="event-pill" data-id="${ev.id}" title="${label}">${label}</button>`;
-        })
-        .join('');
+      var otherClass = isOtherMonth ? ' other-month' : '';
+      var todayClass = isToday ? ' today' : '';
+      var eventsHtml = events.map(function (ev) {
+        var label = ev.hora + ' — Reservado';
+        return '<button type="button" class="event-pill" data-id="' + escapeAttr(ev.id) + '" title="' + escapeAttr(label) + '">' + escapeAttr(label) + '</button>';
+      }).join('');
 
-      html += `<div class="day-cell${otherClass}${todayClass}" data-date="${dayKey}">
-        <div class="day-number">${dayNum >= 1 && dayNum <= daysInMonth ? dayNum : day}</div>
-        <div class="day-events">${eventsHtml}</div>
-      </div>`;
+      html += '<div class="day-cell' + otherClass + todayClass + '" data-date="' + escapeAttr(dayKey) + '">' +
+        '<div class="day-number">' + (dayNum >= 1 && dayNum <= daysInMonth ? dayNum : day) + '</div>' +
+        '<div class="day-events">' + eventsHtml + '</div></div>';
     }
 
     grid.innerHTML = html;
 
-    grid.querySelectorAll('.day-cell').forEach(cell => {
+    grid.querySelectorAll('.day-cell').forEach(function (cell) {
       cell.addEventListener('click', onDayClick);
     });
-    grid.querySelectorAll('.event-pill').forEach(btn => {
-      btn.addEventListener('click', e => {
+    grid.querySelectorAll('.event-pill').forEach(function (btn) {
+      btn.addEventListener('click', function (e) {
         e.stopPropagation();
         openDetail(btn.dataset.id);
       });
     });
+  }
+
+  function escapeAttr(s) {
+    var div = document.createElement('div');
+    div.textContent = s;
+    return div.innerHTML;
   }
 
   function onDayClick(e) {
@@ -169,20 +238,20 @@
       alert('Inicia sesión con Google para poder reservar.');
       return;
     }
-    const date = e.currentTarget.dataset.date;
+    var date = e.currentTarget.dataset.date;
     openModal(date);
   }
 
   function openModal(prefillDate) {
     if (!state.user) return;
-    const overlay = document.getElementById('modalOverlay');
-    const form = document.getElementById('reservationForm');
+    var overlay = document.getElementById('modalOverlay');
+    var form = document.getElementById('reservationForm');
     form.reset();
     document.getElementById('responsable').value = state.user.name || state.user.email;
     if (prefillDate) {
       document.getElementById('fecha').value = prefillDate;
     } else {
-      const d = new Date();
+      var d = new Date();
       document.getElementById('fecha').value = d.toISOString().slice(0, 10);
     }
     overlay.classList.add('open');
@@ -194,26 +263,16 @@
   }
 
   function openDetail(id) {
-    const res = state.reservations.find(r => r.id === id);
+    var res = state.reservations.find(function (r) { return r.id === id; });
     if (!res) return;
-    const content = document.getElementById('detailContent');
-    const canDelete = state.user && res.reservadoPor === state.user.email;
-    content.innerHTML = `
-      <div class="detail-row">
-        <div class="detail-label">Fecha de reserva</div>
-        <div class="detail-value">${formatDate(res.fecha)}</div>
-      </div>
-      <div class="detail-row">
-        <div class="detail-label">Hora</div>
-        <div class="detail-value">${res.hora}</div>
-      </div>
-      <div class="detail-row">
-        <div class="detail-label">Reservado por</div>
-        <div class="detail-value">${escapeHtml(res.reservadoPor || res.responsable || '—')}</div>
-      </div>
-    `;
+    var content = document.getElementById('detailContent');
+    var canDelete = state.user && res.reservadoPor === state.user.email;
+    content.innerHTML =
+      '<div class="detail-row"><div class="detail-label">Fecha de reserva</div><div class="detail-value">' + formatDate(res.fecha) + '</div></div>' +
+      '<div class="detail-row"><div class="detail-label">Hora</div><div class="detail-value">' + escapeHtml(res.hora) + '</div></div>' +
+      '<div class="detail-row"><div class="detail-label">Reservado por</div><div class="detail-value">' + escapeHtml(res.reservadoPor || res.responsable || '—') + '</div></div>';
     document.getElementById('detailOverlay').classList.add('open');
-    const deleteBtn = document.getElementById('deleteReservation');
+    var deleteBtn = document.getElementById('deleteReservation');
     deleteBtn.dataset.id = id;
     deleteBtn.style.display = canDelete ? '' : 'none';
   }
@@ -224,47 +283,81 @@
   }
 
   function escapeHtml(s) {
-    const div = document.createElement('div');
+    var div = document.createElement('div');
     div.textContent = s;
     return div.innerHTML;
   }
 
   function formatDate(isoDate) {
-    const [y, m, d] = isoDate.split('-').map(Number);
-    return `${d} de ${months[m - 1]} de ${y}`;
+    var parts = isoDate.split('-').map(Number);
+    return parts[2] + ' de ' + months[parts[1] - 1] + ' de ' + parts[0];
   }
 
   function onFormSubmit(e) {
     e.preventDefault();
     if (!state.user) return;
-    const responsable = document.getElementById('responsable').value.trim();
-    const asunto = document.getElementById('asunto').value.trim();
-    const fecha = document.getElementById('fecha').value;
-    const hora = document.getElementById('hora').value;
-    const participantes = document.getElementById('participantes').value.trim();
+    var responsable = document.getElementById('responsable').value.trim();
+    var asunto = document.getElementById('asunto').value.trim();
+    var fecha = document.getElementById('fecha').value;
+    var hora = document.getElementById('hora').value;
+    var participantes = document.getElementById('participantes').value.trim();
 
-    const reservation = {
-      id: 'id_' + Date.now(),
-      responsable,
-      asunto,
-      fecha,
-      hora,
+    var data = {
+      responsable: responsable,
+      asunto: asunto,
+      fecha: fecha,
+      hora: hora,
       participantes: participantes || '',
       reservadoPor: state.user.email
     };
-    state.reservations.push(reservation);
-    saveReservations();
+
+    if (useFirebase) {
+      var db = initFirebase();
+      if (db) {
+        function doAdd() {
+          db.collection('reservations').add(data).then(function () {
+            closeModal();
+          }).catch(function (err) {
+            if (err && err.code === 'permission-denied' && firebase && firebase.auth && !firebase.auth().currentUser) {
+              setTimeout(doAdd, 1500);
+              return;
+            }
+            alert('No se pudo guardar en la nube. Revisa la consola (F12).');
+            console.warn('Firestore add error', err);
+          });
+        }
+        doAdd();
+        return;
+      }
+    }
+
+    data.id = 'id_' + Date.now();
+    state.reservations.push(data);
+    saveReservationsLocal();
     closeModal();
     renderCalendar();
   }
 
   function deleteReservation() {
-    const id = document.getElementById('deleteReservation').dataset.id;
+    var id = document.getElementById('deleteReservation').dataset.id;
     if (!id) return;
-    const res = state.reservations.find(r => r.id === id);
+    var res = state.reservations.find(function (r) { return r.id === id; });
     if (res && state.user && res.reservadoPor !== state.user.email) return;
-    state.reservations = state.reservations.filter(r => r.id !== id);
-    saveReservations();
+
+    if (useFirebase) {
+      var db = initFirebase();
+      if (db) {
+        db.collection('reservations').doc(id).delete().then(function () {
+          closeDetail();
+        }).catch(function (err) {
+          console.warn(err);
+        });
+        return;
+      }
+    }
+
+    state.reservations = state.reservations.filter(function (r) { return r.id !== id; });
+    saveReservationsLocal();
     closeDetail();
     renderCalendar();
   }
@@ -281,27 +374,32 @@
 
   document.getElementById('prevMonth').addEventListener('click', prevMonth);
   document.getElementById('nextMonth').addEventListener('click', nextMonth);
-  document.getElementById('newReservation').addEventListener('click', () => openModal());
+  document.getElementById('newReservation').addEventListener('click', function () { openModal(); });
   document.getElementById('reservationForm').addEventListener('submit', onFormSubmit);
   document.getElementById('closeModal').addEventListener('click', closeModal);
   document.getElementById('cancelReservation').addEventListener('click', closeModal);
-  document.getElementById('modalOverlay').addEventListener('click', e => {
+  document.getElementById('modalOverlay').addEventListener('click', function (e) {
     if (e.target.id === 'modalOverlay') closeModal();
   });
-
   document.getElementById('closeDetail').addEventListener('click', closeDetail);
   document.getElementById('closeDetailBtn').addEventListener('click', closeDetail);
   document.getElementById('deleteReservation').addEventListener('click', deleteReservation);
-  document.getElementById('detailOverlay').addEventListener('click', e => {
+  document.getElementById('detailOverlay').addEventListener('click', function (e) {
     if (e.target.id === 'detailOverlay') closeDetail();
   });
 
-  renderCalendar();
+  if (useFirebase) {
+    subscribeReservations();
+  } else {
+    state.reservations = loadReservationsLocal();
+    renderCalendar();
+    setConnectionStatus('local', 'Modo local: configura Firebase en config.js (projectId, apiKey, etc.) y que todos abran la MISMA URL (ej. GitHub Pages).');
+  }
   updateReservationButton();
 
   function tryInitGoogleAuth() {
     if (!window.TACTICAL_SUPPORT_GOOGLE_CLIENT_ID) return;
-    if (window.google?.accounts?.id) {
+    if (window.google && window.google.accounts && window.google.accounts.id) {
       initGoogleAuth();
       return true;
     }

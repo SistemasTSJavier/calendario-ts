@@ -1,0 +1,12 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Cualquiera puede leer las reservaciones (todos ven el calendario)
+    // Solo usuarios autenticados (Google) pueden crear y eliminar
+    match /reservations/{docId} {
+      allow read: if true;
+      allow create: if request.auth != null;
+      allow update, delete: if request.auth != null;
+    }
+  }
+}

@@ -129,7 +129,35 @@ body {
   justify-content: space-between;
   flex-wrap: wrap;
   gap: 1rem;
-  margin-bottom: 1.25rem;
+  margin-bottom: 0.5rem;
+}
+
+.connection-status {
+  font-size: 0.8rem;
+  margin-bottom: 1rem;
+  padding: 0.4rem 0.6rem;
+  border-radius: var(--radius);
+  background: var(--bg-app);
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+}
+
+.connection-status.cloud {
+  background: #ecfdf5;
+  border-color: #a7f3d0;
+  color: #065f46;
+}
+
+.connection-status.local {
+  background: #fef3c7;
+  border-color: #fcd34d;
+  color: #92400e;
+}
+
+.connection-status.error {
+  background: #fee2e2;
+  border-color: #fecaca;
+  color: #991b1b;
 }
 
 .nav-buttons {

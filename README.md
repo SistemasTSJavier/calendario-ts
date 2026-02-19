@@ -1,6 +1,6 @@
 # TACTICAL SUPPORT — Calendario Sala 2do Piso
 
-Calendario de **Horarios Reservados** con inicio de sesión por Google. Solo los gerentes (usuarios con Google) pueden crear reservaciones; el resto solo ve las fechas reservadas. Sin backend: todo en el navegador y `localStorage`.
+Calendario de **Horarios Reservados** con inicio de sesión por Google. Solo los gerentes (usuarios con Google) pueden crear reservaciones; **todos** ven las mismas reservas en cualquier dispositivo gracias a Firebase (opcional). Sin Firebase, las reservas solo se ven en el mismo navegador donde se hicieron.
 
 ---
 
@@ -81,6 +81,68 @@ Así funcionará el login en `https://TU_USUARIO.github.io/Calendario/`.
 window.TACTICAL_SUPPORT_GOOGLE_CLIENT_ID = 'TU_CLIENT_ID.apps.googleusercontent.com';
 ```
 
+---
+
+## Configuración de Firebase (para que todos vean las reservas)
+
+Si no configuras Firebase, las reservas solo se guardan en el mismo navegador (localStorage). Para que **cualquier persona** (otro PC, otro móvil) vea las mismas reservas en tiempo real:
+
+### 1. Crear proyecto Firebase
+
+1. Entra en [Firebase Console](https://console.firebase.google.com/).
+2. **Agregar proyecto** (o usa uno existente).
+3. Si quieres, activa Google Analytics (opcional). **Continuar** → **Crear proyecto**.
+
+### 2. Registrar la app web
+
+1. En el proyecto, clic en el icono **</>** (Web).
+2. **Nombre de la app**: por ejemplo "Calendario TS". No marques Firebase Hosting por ahora.
+3. **Registrar app** → copia el objeto `firebaseConfig` que te muestra (apiKey, authDomain, projectId, etc.).
+
+### 3. Activar Firestore
+
+1. En el menú izquierdo: **Compilación** → **Firestore Database**.
+2. **Crear base de datos** → modo **Producción** → elegir región (ej. `europe-west1`) → **Habilitar**.
+3. Ve a la pestaña **Reglas**. Sustituye las reglas por estas (o pégalas desde el archivo `firestore.rules` del proyecto):
+
+```
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /reservations/{docId} {
+      allow read: if true;
+      allow create, update, delete: if request.auth != null;
+    }
+  }
+}
+```
+
+4. **Publicar**.
+
+### 4. Activar Authentication (Google)
+
+1. **Compilación** → **Authentication** → **Comenzar**.
+2. Pestaña **Sign-in method** → **Google** → **Activar** → guardar (usa el mismo proyecto de Google Cloud que ya tienes para el Client ID).
+
+### 5. Poner la config en tu proyecto
+
+En `config.js`, rellena el objeto de Firebase con los datos que copiaste:
+
+```js
+window.TACTICAL_SUPPORT_FIREBASE_CONFIG = {
+  apiKey: 'AIza...',
+  authDomain: 'tu-proyecto.firebaseapp.com',
+  projectId: 'tu-proyecto',
+  storageBucket: 'tu-proyecto.appspot.com',
+  messagingSenderId: '123456789',
+  appId: '1:123456789:web:abc123'
+};
+```
+
+Guarda y vuelve a cargar el calendario. A partir de entonces las reservas se guardan en la nube y **todos los que abran la misma URL verán las mismas reservas**.
+
+---
+
 ## Cómo usar
 
 - Abre `index.html` en el navegador (o sirve la carpeta con un servidor local si lo prefieres).
@@ -89,4 +151,4 @@ window.TACTICAL_SUPPORT_GOOGLE_CLIENT_ID = 'TU_CLIENT_ID.apps.googleusercontent.
 - **Ver reservas**: en el calendario solo se muestra la **fecha y hora** de cada reserva (“Hora — Reservado”). Clic en la pastilla para ver detalle (fecha, hora, reservado por).
 - **Eliminar**: solo puedes eliminar tus propias reservaciones (mismo email de Google).
 
-Los datos se guardan en `localStorage` del navegador (sin servidor).
+**Datos:** Con Firebase configurado, las reservas se guardan en la nube y **todos** las ven en tiempo real en cualquier dispositivo. Sin Firebase, se usan solo en el mismo navegador (`localStorage`).

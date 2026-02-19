@@ -93,6 +93,10 @@
   function initGoogleAuth() {
     const clientId = window.TACTICAL_SUPPORT_GOOGLE_CLIENT_ID;
     if (!clientId || !window.google) return;
+    // Comprobar que el Client ID es del proyecto Firebase (809581021929). Si en consola ves otro número, hay caché/config antigua.
+    if (clientId.indexOf('809581021929') !== 0) {
+      console.warn('Calendario: TACTICAL_SUPPORT_GOOGLE_CLIENT_ID no es del proyecto Firebase (809581021929). Revisa config.js y recarga con Ctrl+Shift+R.');
+    }
 
     window.google.accounts.id.initialize({
       client_id: clientId,

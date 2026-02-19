@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TACTICAL SUPPORT - Sala 2do Piso</title>
+  <link rel="stylesheet" href="styles.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&display=swap" rel="stylesheet">
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
+</head>
+<body>
+  <div class="app">
+    <header class="header">
+      <div class="header-top">
+        <div>
+          <h1 class="title">TACTICAL SUPPORT</h1>
+          <p class="subtitle">SALA 2do Piso</p>
+          <h2 class="section-title">Horarios Reservados</h2>
+        </div>
+        <div class="auth-area">
+          <div id="googleSignInBtn"></div>
+          <div id="userInfo" class="user-info" style="display: none;">
+            <span class="user-email" id="userEmail"></span>
+            <button type="button" class="btn btn-outline-light btn-sm" id="signOutBtn">Cerrar sesión</button>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <main class="main">
+      <div class="toolbar">
+        <div class="nav-buttons">
+          <button type="button" class="btn btn-icon" id="prevMonth" aria-label="Mes anterior">‹</button>
+          <button type="button" class="btn btn-icon" id="nextMonth" aria-label="Mes siguiente">›</button>
+          <h3 class="current-month" id="currentMonth"></h3>
+        </div>
+        <button type="button" class="btn btn-primary" id="newReservation" disabled title="Inicia sesión con Google para reservar">+ Nueva reservación</button>
+      </div>
+
+      <div class="calendar-wrapper">
+        <div class="weekdays-header">
+          <span>Domingo</span>
+          <span>Lunes</span>
+          <span>Martes</span>
+          <span>Miércoles</span>
+          <span>Jueves</span>
+          <span>Viernes</span>
+          <span>Sábado</span>
+        </div>
+        <div class="calendar-grid" id="calendarGrid"></div>
+      </div>
+    </main>
+  </div>
+
+  <!-- Modal Nueva reservación -->
+  <div class="modal-overlay" id="modalOverlay">
+    <div class="modal" id="reservationModal">
+      <div class="modal-header">
+        <h3>Nueva reservación</h3>
+        <button type="button" class="btn-close" id="closeModal" aria-label="Cerrar">×</button>
+      </div>
+      <form class="reservation-form" id="reservationForm">
+        <div class="form-group">
+          <label for="responsable">Responsable</label>
+          <input type="text" id="responsable" name="responsable" required placeholder="Nombre del responsable">
+        </div>
+        <div class="form-group">
+          <label for="asunto">Asunto</label>
+          <input type="text" id="asunto" name="asunto" required placeholder="Tema o motivo de la reunión">
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label for="fecha">Día</label>
+            <input type="date" id="fecha" name="fecha" required>
+          </div>
+          <div class="form-group">
+            <label for="hora">Hora</label>
+            <input type="time" id="hora" name="hora" required>
+          </div>
+        </div>
+        <div class="form-group">
+          <label for="participantes">Participantes</label>
+          <input type="text" id="participantes" name="participantes" placeholder="Personas involucradas (separadas por coma)">
+        </div>
+        <div class="form-actions">
+          <button type="button" class="btn btn-secondary" id="cancelReservation">Cancelar</button>
+          <button type="submit" class="btn btn-primary">Guardar reservación</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal Ver detalle de reservación -->
+  <div class="modal-overlay" id="detailOverlay">
+    <div class="modal" id="detailModal">
+      <div class="modal-header">
+        <h3>Detalle de reservación</h3>
+        <button type="button" class="btn-close" id="closeDetail" aria-label="Cerrar">×</button>
+      </div>
+      <div class="detail-content" id="detailContent"></div>
+      <div class="form-actions">
+        <button type="button" class="btn btn-danger" id="deleteReservation">Eliminar</button>
+        <button type="button" class="btn btn-secondary" id="closeDetailBtn">Cerrar</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="config.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

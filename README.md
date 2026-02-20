@@ -1,6 +1,9 @@
 # TACTICAL SUPPORT — Calendario Sala 2do Piso
 
-Calendario de **Horarios Reservados** con inicio de sesión por Google. Solo los gerentes (usuarios con Google) pueden crear reservaciones; **todos** ven las mismas reservas en cualquier dispositivo gracias a Firebase (opcional). Sin Firebase, las reservas solo se ven en el mismo navegador donde se hicieron.
+Calendario de **Horarios Reservados** con inicio de sesión por Google. Solo los gerentes (usuarios con Google) pueden crear reservaciones; **todos** ven las mismas reservas en cualquier dispositivo.
+
+- **App recomendada (Flutter + Supabase):** en la carpeta **`calendario_app/`** tienes la versión en Flutter con backend en Supabase, tiempo real y soporte móvil/web. Ver `calendario_app/README.md` y `calendario_app/SUPABASE-SETUP.md`.
+- **Versión web (HTML/JS + Firebase):** la raíz del repo es la versión clásica para GitHub Pages; con Firebase las reservas se comparten en la nube (ver más abajo).
 
 ---
 
